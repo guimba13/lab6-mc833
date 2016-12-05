@@ -93,7 +93,11 @@ int main(int argc, char **argv) {
 
     if (FD_ISSET(sockfd, &rset)) { /* socket is readable */
         // Escreve na saida padrao a informacao obtida do servidor
-      n = read(sockfd, recvline, sizeof(recvline)-1);
+
+      if((n = read(sockfd, recvline, sizeof(recvline)-1)) == 0){
+        return 0;
+      }
+
       //printf("N: %d\n", n);
       recvline[n] ='\0';
       if (fputs(recvline, stdout) == EOF) {
@@ -102,6 +106,8 @@ int main(int argc, char **argv) {
       }
       fflush(stdout);
       recvline[0] = '\0';
+    } else{
+        //printf("%s\n", "ELSE");
     }
 
     if (FD_ISSET(fileno(stdin), &rset)) {  /* input is readable */
@@ -112,15 +118,17 @@ int main(int argc, char **argv) {
             strcpy(msg, buffer);    
         }else{
             stdineof = 1;
-                shutdown(sockfd, SHUT_WR);  /* send FIN */
-                FD_CLR(fileno(stdin), &rset);
-                continue;
+            shutdown(sockfd, SHUT_WR);  /* send FIN */
+            FD_CLR(fileno(stdin), &rset);
+            continue;
         }
-
+        //printf("PRÉ SEND TO SOCKET: %lu\n", sizeof(msg));
+        usleep(500);
         if (send(sockfd, msg, strlen(msg), 0) < 0) {
             puts("Send failed.");
             return 1;
         }
+        fflush(stdout);
         fflush(stdin);
     }
   } while (1);
