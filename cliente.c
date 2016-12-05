@@ -91,44 +91,32 @@ int main(int argc, char **argv) {
     select(maxfdp1, &rset, NULL, NULL, NULL);
 
 
-    /*ESSA PARTE VÊ QUANDO O SOCKET PODE SER LIDO, AQUI ROLA O READ NORMAL MAS TEM QUE DAR UM JEITO DE MATAR O PROGRAMA
-    QUANDO TERMINAR DE ESCREVER TUDO*/
     if (FD_ISSET(sockfd, &rset)) { /* socket is readable */
-        
-    //OLHA SE O SOCKET TERMINOU DE SCREVER     
-      if((n = read(sockfd, recvline, sizeof(recvline)-1)) == 0){
-        //vê se terminou de ler o arquivo de entrada
-        if(stdineof){
-            //encerra a conexão
-            shutdown(sockfd, SHUT_WR);  /* send FIN */
-            exit(0);
-        }
-      }
-    // Escreve na saida padrao a informacao obtida do servidor
+        // Escreve na saida padrao a informacao obtida do servidor
+      n = read(sockfd, recvline, sizeof(recvline)-1);
+      //printf("N: %d\n", n);
+      recvline[n] ='\0';
       if (fputs(recvline, stdout) == EOF) {
         perror("fputs error");
         exit(1);
       }
       fflush(stdout);
+      recvline[0] = '\0';
     }
 
-
-    //AQUI VERIFICA SE PODE LER DA ENTRADA PADRÃO
     if (FD_ISSET(fileno(stdin), &rset)) {  /* input is readable */
         //recvline[n] = 0;
         // Le a entrada padrao
-        //PEGA LINHA POR LINHA DO ARQUIVO LIDO COMO < IN.TXT
         buffer = (char *)malloc(msgsize * sizeof(char));
         if(getline(&buffer, &msgsize, stdin) != EOF){
             strcpy(msg, buffer);    
         }else{
-            //SETA O FIM DO ARQUIVO E MANDA PARAR DE LER A ENTRADA PADRÃO
             stdineof = 1;
-            FD_CLR(fileno(stdin), &rset);
-            continue;
+                shutdown(sockfd, SHUT_WR);  /* send FIN */
+                FD_CLR(fileno(stdin), &rset);
+                continue;
         }
-        //ENVIA MSG LIDA (DIGITANDO FUNCIONA, IMPORTANDO O ARQUIVO MANDA TUDO DE UMA VEZ)
-        //AQUI TEM QUE DAR UM JEITO DE MANDAR UMA MSG POR VÊZ, TA ESTRANHO PQ PARECE QUE FUNCIONA
+
         if (send(sockfd, msg, strlen(msg), 0) < 0) {
             puts("Send failed.");
             return 1;
