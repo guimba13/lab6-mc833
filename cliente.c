@@ -12,6 +12,8 @@
 #include <unistd.h>
 
 #define MAXLINE 4096
+#define TCP 0
+#define UDP 1
 
 int main(int argc, char **argv) {
   int    sockfd, n;
@@ -21,6 +23,7 @@ int main(int argc, char **argv) {
   char   *buffer;
   size_t msgsize = 1000;
   struct sockaddr_in servaddr, _local, _remote;
+  int connectionType;
 
   // Verifica o argumento passada para o cliente pela entrada padrao
   if (argc != 2) {
@@ -31,9 +34,24 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  // Pega o socket para ser realizado a conexao
-  if ( (sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
-    perror("socket error");
+  printf("Selecione o tipo da conexão:\n0 - TCP\n1 - UDP\n");
+  scanf("%d", &connectionType);
+  if (connectionType == TCP) {
+    printf("Conexão TCP!\n");
+    // Pega o socket para ser realizado a conexao
+    if ( (sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+      perror("socket error");
+      exit(1);
+    }
+  } else if (connectionType == UDP) {
+    printf("Conexão UDP!\n");
+    // Pega o socket para ser realizado a conexao
+    if ( (sockfd = socket(AF_INET, SOCK_DGRAM, 0)) < 0) {
+      perror("socket error");
+      exit(1);
+    }
+  } else {
+    printf("Conexão inválida!\n");
     exit(1);
   }
 
@@ -75,7 +93,7 @@ int main(int argc, char **argv) {
 
   int maxfdp1, stdineof;
   fd_set rset;
-  
+
   stdineof = 0;
   FD_ZERO(&rset);
 
@@ -87,7 +105,7 @@ int main(int argc, char **argv) {
     FD_SET(sockfd, &rset);
 
     maxfdp1 = (fileno(stdin)>=sockfd ? fileno(stdin) : sockfd) + 1;
-    
+
     select(maxfdp1, &rset, NULL, NULL, NULL);
 
 
@@ -107,7 +125,7 @@ int main(int argc, char **argv) {
         // Le a entrada padrao
         buffer = (char *)malloc(msgsize * sizeof(char));
         if(getline(&buffer, &msgsize, stdin) != EOF){
-            strcpy(msg, buffer);    
+            strcpy(msg, buffer);
         }else{
             stdineof = 1;
             shutdown(sockfd, SHUT_WR);  /* send FIN */
@@ -127,6 +145,5 @@ int main(int argc, char **argv) {
     perror("read error");
     exit(1);
   }
-
   exit(0);
 }

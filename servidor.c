@@ -14,16 +14,24 @@
 
 #define LISTENQ 10
 #define MAXDATASIZE 100
+#define SERV_PORT 13000
 void* connection_handler(void* socket_desc);
 
+int max(int a, int b) {
+  if (a > b) return a;
+  else return b;
+}
+
 int main (int argc, char **argv) {
-  int    listenfd, connfd, *new_sock;
+  int    listenfd, connfd, udpfd, *new_sock, nready, maxfdp1;
   struct sockaddr_in servaddr,_self, _loopId;
   char   buf[MAXDATASIZE];
   char   str[INET_ADDRSTRLEN];
   time_t ticks;
+  fd_set  rset;
 
-  // Começa a escutar o socket para a conexao
+  /*****        TCP       *****/
+  // Começa a escutar o socket para a conexao TCP
   if ((listenfd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
     perror("socket");
     exit(1);
@@ -33,7 +41,7 @@ int main (int argc, char **argv) {
   bzero(&servaddr, sizeof(servaddr));
   servaddr.sin_family      = AF_INET;
   servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
-  servaddr.sin_port        = htons(13000);
+  servaddr.sin_port        = htons(SERV_PORT);
 
   // Da bind na porta e no socket e trata o erro
   if (bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
@@ -47,41 +55,62 @@ int main (int argc, char **argv) {
     exit(1);
   }
 
+  /*****        UDP       *****/
+  if ((udpfd = socket(AF_INET, SOCK_DGRAM, 0)) == -1) {
+    perror("socket");
+    exit(1);
+  }
+
+  bzero(&servaddr, sizeof(servaddr));
+  servaddr.sin_family = AF_INET;
+  servaddr.sin_addr.s_addr = htonl(INADDR_ANY);
+  servaddr.sin_port = htons(SERV_PORT);
+
+  if (bind(udpfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == -1) {
+    perror("bind");
+    exit(1);
+  }
+
+  FD_ZERO(&rset);
+  maxfdp1 = max(listenfd, udpfd) + 1;
   // Mantem o servidor rodando infinitamente
   for ( ; ; ) {
-    // Aceita a conexao de um cliente e trata o erro
-    socklen_t len = sizeof(_self);
-    if ((connfd = accept(listenfd, (struct sockaddr *) &_self, &len)) == -1 ) {
-      perror("accept");
-      exit(1);
+    FD_SET(listenfd, &rset);
+    FD_SET(udpfd, &rset);
+    if ((nready = select(maxfdp1, &rset, NULL, NULL, NULL)) < 0) {
+      if (errno == EINTR) continue;
+      else {
+        perror("select");
+        exit(1);
+      }
     }
-    inet_ntop(AF_INET, &(_self.sin_addr), str, INET_ADDRSTRLEN);
-    
 
-    //LOGA EM UM ARQUIVO O INSTANTE DE CONEXÃO DE UM CLIENTE
-    FILE *f;
-    f = fopen("connection.log", "a+"); 
-    if (f == NULL) { 
-      puts("Something went wrong writing log!");
-    }else{
-      time_t rawtime;
-      struct tm * timeinfo;
+    if (FD_ISSET(listenfd, &rset)) {
+      // Aceita a conexao de um cliente e trata o erro
+      socklen_t len = sizeof(_self);
+      if ((connfd = accept(listenfd, (struct sockaddr *) &_self, &len)) == -1 ) {
+        perror("accept");
+        exit(1);
+      }
+      inet_ntop(AF_INET, &(_self.sin_addr), str, INET_ADDRSTRLEN);
 
-      time ( &rawtime );
-      timeinfo = localtime ( &rawtime );
-    
-      fprintf(f, "%sCONNECTION - IP : %s | PORT : %d\n",asctime (timeinfo), str, ntohs(_self.sin_port));  
-    }
-    fclose(f);
-    
-    
-    //cria uma thread para cada conexão
-    pthread_t thread;
-    new_sock = malloc(1);
-    *new_sock = connfd;
-    if (pthread_create(&thread, NULL, connection_handler, (void*) new_sock) < 0) {
-      perror("Could not create thread");
-      exit(1);
+      //cria uma thread para cada conexão
+      pthread_t thread;
+      new_sock = malloc(1);
+      *new_sock = connfd;
+      if (pthread_create(&thread, NULL, connection_handler, (void*) new_sock) < 0) {
+        perror("Could not create thread");
+        exit(1);
+      }
+    } else if (FD_ISSET(udpfd, &rset)) {
+      //cria uma thread para cada conexão
+      pthread_t thread;
+      new_sock = malloc(1);
+      *new_sock = udpfd;
+      if (pthread_create(&thread, NULL, connection_handler, (void*) new_sock) < 0) {
+        perror("Could not create thread");
+        exit(1);
+      }
     }
   }
   return(0);
@@ -124,14 +153,14 @@ void *connection_handler(void* socket_desc) {
 
     while (fgets(buffer, sizeof(buffer), f) != NULL) {
       strlength = strlen(buffer);
-      temp = realloc(response, size + strlength);  
+      temp = realloc(response, size + strlength);
       if (temp == NULL) {
         // allocation error
       } else {
         response = temp;
       }
-      strcpy(response + size - 1, buffer);     
-      size += strlength; 
+      strcpy(response + size - 1, buffer);
+      size += strlength;
     }
     pclose(f);*/
 
@@ -154,7 +183,7 @@ void *connection_handler(void* socket_desc) {
     //SALVA NO ARQUIVO DE LOG AS INFORMAÇÕES DE QUEM FOI DESCONECTADO
     FILE *f;
     f = fopen("connection.log", "a+"); // a+ (create + append) option will allow appending which is useful in a log file
-    if (f == NULL) { 
+    if (f == NULL) {
       puts("Something went wrong writing log!");
     }else{
       time_t rawtime;
@@ -162,11 +191,11 @@ void *connection_handler(void* socket_desc) {
 
       time ( &rawtime );
       timeinfo = localtime ( &rawtime );
-      
-      fprintf(f, "%sDESCONECTION - IP : %s | PORT : %d\n",asctime (timeinfo), str, ntohs(_loopId.sin_port));  
+
+      fprintf(f, "%sDESCONECTION - IP : %s | PORT : %d\n",asctime (timeinfo), str, ntohs(_loopId.sin_port));
     }
     fclose(f);
-  
+
     fflush(stdout);
   }
   else if(read_size == -1)
