@@ -14,8 +14,8 @@
 #define MAXLINE 4096
 
 int main(int argc, char **argv) {
+
   int    sockfd, n;
-  char   recvline[MAXLINE + 1];
   char   error[MAXLINE + 1];
   char   msg[1000];
   char   *buffer;
@@ -41,6 +41,7 @@ int main(int argc, char **argv) {
   bzero(&servaddr, sizeof(servaddr));
   servaddr.sin_family = AF_INET;
   servaddr.sin_port   = htons(13000);
+
   // Verifica a validade do IP passado como parametro
   if (inet_pton(AF_INET, argv[1], &servaddr.sin_addr) <= 0) {
     perror("inet_pton error");
@@ -53,85 +54,87 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
-  // Chama a função getsockname para pegar o endereço ip e porta do socket local
-  bzero(&_local, sizeof(_local));
-  socklen_t len = sizeof(_local);
-  if (getsockname (sockfd, (struct sockaddr *) &_local, &len) == -1) {
-    perror("getsockname() failed");
-    return -1;
-  }
-
-  //Imprime as informações do socket local
-  //printf("IP SOCKET LOCAL: %s\nPORT SOCKET LOCAL: %d\n", inet_ntoa(_local.sin_addr), ntohs(_local.sin_port));
-
-  //Pega as informações do socket remoto
-  socklen_t lenRemote = sizeof(_remote);
-  if (getpeername(sockfd, (struct sockaddr *) &_remote, &lenRemote) == -1) {
-    perror("getpeername() failed hard");
-    return -1;
-  }
-  //Imprime as informações do socket remoto
-  //printf("\nIP SOCKET REMOTO: %s\nPORT SOCKET REMOTO: %d\n", inet_ntoa(_remote.sin_addr), ntohs(_remote.sin_port));
-
+  //cria as variaveis utilizadas pelo select
   int maxfdp1, stdineof;
   fd_set rset;
   
   stdineof = 0;
-  FD_ZERO(&rset);
 
   // Troca de mensagens com o servidor
   do {
+
+    //reseta os vetores de sockets que devem ser olhados pelo select
+    FD_ZERO(&rset);
+
+    //se terminou de ler a entrada padrão não precisa mais passar ela pro select
     if (stdineof == 0)
         FD_SET(fileno(stdin), &rset);
 
+    //adiciona o socket com o servidor na lista do select
     FD_SET(sockfd, &rset);
 
+    //pega o maior id do socket para passar pro select
     maxfdp1 = (fileno(stdin)>=sockfd ? fileno(stdin) : sockfd) + 1;
     
-    select(maxfdp1, &rset, NULL, NULL, NULL);
-
-
-    if (FD_ISSET(sockfd, &rset)) { /* socket is readable */
-        // Escreve na saida padrao a informacao obtida do servidor
-
-      if((n = read(sockfd, recvline, sizeof(recvline)-1)) == 0){
+    //chama o select e fecha o programa em caso de erro
+    int ret = select(sockfd + 1, &rset, NULL, NULL, NULL);
+    if(ret <=0)
         return 0;
-      }
 
-      //printf("N: %d\n", n);
-      recvline[n] ='\0';
-      if (fputs(recvline, stdout) == EOF) {
-        perror("fputs error");
-        exit(1);
-      }
-      fflush(stdout);
-      recvline[0] = '\0';
-    } else{
-        //printf("%s\n", "ELSE");
+    //verifica se o socket conectado ao servidor esta disponivel para leitura
+    if (FD_ISSET(sockfd, &rset)) { 
+    
+        //cria o buffer de leitura do socket e realiza a leitura
+        char recvline[MAXLINE + 1] = {'\0'};
+        if((n = read(sockfd, recvline, sizeof(recvline)-1)) == 0){
+            //se a leitura foi finalizada encerra o programa
+            /* ESSA PARTE QUE NÃO ESTÁ FUNCIONANDO. APÓS FECHAR A CONEXÃO E TERMINAR A ESCRITA DEVERIA ENTRAR AQUI*/
+            if(stdineof)
+                return 0;
+        }
+
+        //Escreve na saída padrão o echo do servidor
+        recvline[n] ='\0';
+        if (fputs(recvline, stdout) == EOF) {
+            perror("fputs error");
+            exit(1);
+        }
+        fflush(stdout);
+        recvline[0] = '\0';
+
     }
 
-    if (FD_ISSET(fileno(stdin), &rset)) {  /* input is readable */
-        //recvline[n] = 0;
+    //verifica se a entrada padrão esta disponível para leitura
+    if (FD_ISSET(fileno(stdin), &rset)) {  
+
         // Le a entrada padrao
         buffer = (char *)malloc(msgsize * sizeof(char));
         if(getline(&buffer, &msgsize, stdin) != EOF){
             strcpy(msg, buffer);    
         }else{
+            //se chegar ao fim da entrada padrão seta a flag e encerra a conexão de escrita no socket
             stdineof = 1;
             shutdown(sockfd, SHUT_WR);  /* send FIN */
-            FD_CLR(fileno(stdin), &rset);
+            //FD_CLR(fileno(stdin), &rset);
+            FD_ZERO(&rset);
             continue;
         }
-        //printf("PRÉ SEND TO SOCKET: %lu\n", sizeof(msg));
+        //sleep para não mandar o conteúdo do arquivo inteiro de uma vez
         usleep(500);
+
+        //escreve o conteúdo lido no socket para o servidor
         if (send(sockfd, msg, strlen(msg), 0) < 0) {
             puts("Send failed.");
             return 1;
         }
+
+        //limpa as entradas e saídas padrões
         fflush(stdout);
         fflush(stdin);
+
     }
   } while (1);
+  
   // Verifica por erro na conexao
   if (n < 0) {
     perror("read error");

@@ -115,26 +115,6 @@ void *connection_handler(void* socket_desc) {
       printf("IP: %s | PORT: %d | %s\n", str, ntohs(_loopId.sin_port), message);
     }
 
-    //EXECUTA A CHAMADA DE SISTEMA E COPIA A RESPOSTA PRA UM BUFFER
-    /*FILE *f;
-    if (NULL == (f = popen(message, "r"))) {
-      perror("popen");
-      exit(EXIT_FAILURE);
-    }
-
-    while (fgets(buffer, sizeof(buffer), f) != NULL) {
-      strlength = strlen(buffer);
-      temp = realloc(response, size + strlength);  
-      if (temp == NULL) {
-        // allocation error
-      } else {
-        response = temp;
-      }
-      strcpy(response + size - 1, buffer);     
-      size += strlength; 
-    }
-    pclose(f);*/
-
     //Envia a resposta da execução do comando de volta ao cliente
     write(sock , message , read_size);
   }
