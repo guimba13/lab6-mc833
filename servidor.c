@@ -114,13 +114,16 @@ void *connection_handler(void* socket_desc) {
       inet_ntop(AF_INET, &(_loopId.sin_addr), str, INET_ADDRSTRLEN);
       printf("IP: %s | PORT: %d | %s\n", str, ntohs(_loopId.sin_port), message);
     }
-
+  
+    printf("%s\n", "READ_SIZE IGUAL A 0");
     //Envia a resposta da execução do comando de volta ao cliente
     write(sock , message , read_size);
   }
 
   //realiza verificações
   if(read_size == 0) {
+    //escreve o conjunto de caracteres abaixo no socket para indicar o fim da conexão e avisar o cliente que o programa deve ser encerrado.
+    write(sock , "&end&", 6);
 
     //Pega as informações do socket do cliente para informar quem foi desconectado
     socklen_t lenS = sizeof(_loopId);

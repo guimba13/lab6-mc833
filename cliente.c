@@ -77,7 +77,11 @@ int main(int argc, char **argv) {
     maxfdp1 = (fileno(stdin)>=sockfd ? fileno(stdin) : sockfd) + 1;
     
     //chama o select e fecha o programa em caso de erro
-    int ret = select(sockfd + 1, &rset, NULL, NULL, NULL);
+
+    //ESSE É O PONTO ONDE O PROGRAMA FICA TRAVADO APÓS EXECUTAR shutdown(sockfd, SHUT_WR);
+    //ele não passa do select mas deveria passar e retornar true para FD_ISSET(sockfd, &rset)
+    int ret = select(maxfdp1, &rset, NULL, NULL, NULL);
+
     if(ret <=0)
         return 0;
 
@@ -95,6 +99,16 @@ int main(int argc, char **argv) {
 
         //Escreve na saída padrão o echo do servidor
         recvline[n] ='\0';
+
+        //checca pelo fim do arquivo delimitado pelo conjunto de caracteres abaixo enviado pelo servidor antes de encerrar a conexão
+        char *end = "&end&";
+        if(strcmp(recvline, end)==0){
+
+          //se a leitura do stdin ja terminou
+          if(stdineof)
+                return 0;
+
+        }
         if (fputs(recvline, stdout) == EOF) {
             perror("fputs error");
             exit(1);
@@ -134,7 +148,7 @@ int main(int argc, char **argv) {
 
     }
   } while (1);
-  
+
   // Verifica por erro na conexao
   if (n < 0) {
     perror("read error");
